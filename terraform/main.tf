@@ -9,7 +9,14 @@ data "aws_ecs_cluster" "this" {
 locals {
   service_defs = {
     for name, cfg in var.services :
-    name => jsondecode(file(cfg.task_def_path))
+    name => jsondecode(
+      (
+        try(
+          templatefile(cfg.task_def_template_path, cfg.task_def_vars),
+          ""
+        ) != ""
+      ) ? templatefile(cfg.task_def_template_path, cfg.task_def_vars) : file(cfg.task_def_path)
+    )
   }
 }
 

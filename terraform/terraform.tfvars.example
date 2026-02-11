@@ -1,30 +1,3 @@
-# Terraform baseline (OSC-IS)
-
-This folder provides a baseline for managing ECS services and CloudWatch log groups
-from task definition JSON files or templates in the infra repo.
-
-## What this manages
-
-- ECS task definitions (rendered from JSON templates or parsed from JSON files)
-- ECS services (Fargate, awsvpc)
-- CloudWatch log groups `/ecs/<service-name>`
-
-## Prereqs
-
-- Terraform >= 1.5
-- AWS credentials with ECS, CloudWatch permissions
-- Existing VPC, subnets, and security groups
-
-## Templates vs JSON
-
-You can either point to a raw JSON file (`task_def_path`) or to a template
-(`task_def_template_path`) with a variable map (`task_def_vars`). Templates are
-rendered in memory by Terraform; no JSON file is written to disk unless you add
-an explicit `local_file` resource.
-
-## Example `terraform.tfvars`
-
-```
 region           = "<aws-region>"
 ecs_cluster_name = "<ecs-cluster-name>"
 vpc_id           = "<vpc-id>"
@@ -85,31 +58,4 @@ services = {
     }
     desired_count = 3
   }
-  osc-submission-listener = {
-    task_def_path = "${path.module}/../../submission-listener-task-definition.json"
-    desired_count = 1
-  }
-  osc-api = {
-    task_def_path = "${path.module}/../../api-gateway-updated-task-def.json"
-    desired_count = 1
-  }
-  osc-get-history-worker = {
-    task_def_path = "${path.module}/../../OSC-Artifact-Submission/get_history_worker/ghw-task-def.json"
-    desired_count = 1
-  }
 }
-```
-
-## Workflow
-
-```
-terraform init
-terraform plan
-terraform apply
-```
-
-If any of the ECS services already exist, import them before `apply`:
-
-```
-terraform import aws_ecs_service.this["osc-fabric-bridge"] <service-arn>
-```

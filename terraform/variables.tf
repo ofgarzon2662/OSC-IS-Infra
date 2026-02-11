@@ -31,11 +31,13 @@ variable "assign_public_ip" {
 
 variable "services" {
   type = map(object({
-    task_def_path = string
-    desired_count = number
-    enable_exec   = optional(bool, true)
+    task_def_path           = optional(string)
+    task_def_template_path  = optional(string)
+    task_def_vars           = optional(map(string), {})
+    desired_count           = number
+    enable_exec             = optional(bool, true)
   }))
-  description = "Map of service names to task definition JSON paths."
+  description = "Map of service names to task definition JSON paths or templates."
 }
 
 variable "log_retention_in_days" {

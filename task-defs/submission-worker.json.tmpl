@@ -1,0 +1,60 @@
+{
+  "family": "osc-submission-worker",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "${cpu}",
+  "memory": "${memory}",
+  "executionRoleArn": "${execution_role_arn}",
+  "taskRoleArn": "${task_role_arn}",
+  "containerDefinitions": [
+    {
+      "name": "submission-worker",
+      "image": "${image}",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "RABBITMQ_QUEUE_UPDATED", "value": "${rabbitmq_queue_updated}" },
+        { "name": "RABBITMQ_PORT", "value": "${rabbitmq_port}" },
+        { "name": "RABBITMQ_QUEUE_SUBMIT", "value": "${rabbitmq_queue_submit}" },
+        { "name": "ENVIRONMENT", "value": "${environment}" },
+        { "name": "FABRIC_BRIDGE_URL", "value": "${fabric_bridge_url}" },
+        { "name": "RABBITMQ_HOST", "value": "${rabbitmq_host}" },
+        { "name": "RABBITMQ_QUEUE_UPDATE", "value": "${rabbitmq_queue_update}" },
+        { "name": "RABBITMQ_QUEUE_SUBMITTED", "value": "${rabbitmq_queue_submitted}" }
+      ],
+      "secrets": [
+        {
+          "name": "RABBITMQ_USER",
+          "valueFrom": "${rabbitmq_user_secret_arn}"
+        },
+        {
+          "name": "RABBITMQ_PASS",
+          "valueFrom": "${rabbitmq_pass_secret_arn}"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "${log_group}",
+          "awslogs-region": "${aws_region}",
+          "awslogs-stream-prefix": "submission-worker"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "python - <<'PY'\nimport sys,urllib.request\ntry:\n  with urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3) as r:\n    sys.exit(0 if r.status==200 else 1)\nexcept Exception:\n  sys.exit(1)\nPY"
+        ],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 120
+      }
+    }
+  ]
+}

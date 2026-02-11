@@ -1,0 +1,66 @@
+{
+  "family": "osc-fabric-bridge",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "${cpu}",
+  "memory": "${memory}",
+  "executionRoleArn": "${execution_role_arn}",
+  "taskRoleArn": "${task_role_arn}",
+  "containerDefinitions": [
+    {
+      "name": "fabric-bridge",
+      "image": "${image}",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 4000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "NODE_ENV", "value": "production" },
+        { "name": "PORT", "value": "4000" },
+        { "name": "FABRIC_REAL_MODE", "value": "true" },
+        { "name": "FABRIC_CHANNEL", "value": "${fabric_channel}" },
+        { "name": "FABRIC_CHAINCODE", "value": "${fabric_chaincode}" },
+        { "name": "FABRIC_PEER", "value": "${fabric_peer}" },
+        { "name": "MSP_ID", "value": "${msp_id}" },
+        { "name": "IDENTITY_LABEL", "value": "${identity_label}" },
+        { "name": "WALLET_PATH", "value": "/app/wallets" },
+        { "name": "IDENTITY_FILE_PATH", "value": "/app/wallets/Org1MSP/svc-org1.id" },
+        { "name": "TLS_CERT_PATH", "value": "/app/certs/peer0-org1-tlsca.crt" },
+        { "name": "PEER_ENDPOINT", "value": "${peer_endpoint}" },
+        { "name": "DISCOVERY_ENABLED", "value": "true" },
+        { "name": "DISCOVERY_AS_LOCALHOST", "value": "false" },
+        { "name": "SUBMITTER_EMAIL_DEFAULT", "value": "${submitter_email_default}" },
+        { "name": "SUBMITTER_USERNAME_DEFAULT", "value": "${submitter_username_default}" },
+        { "name": "TLS_OVERRIDE_HOSTNAME", "value": "${tls_override_hostname}" },
+        { "name": "S3_BUCKET", "value": "${s3_bucket}" },
+        { "name": "S3_ORG1_IDENTITY_KEY", "value": "${s3_org1_identity_key}" },
+        { "name": "S3_ORG1_CERT_KEY", "value": "${s3_org1_cert_key}" },
+        { "name": "SUBMIT_FN", "value": "${submit_fn}" },
+        { "name": "UPDATE_FN", "value": "${update_fn}" },
+        { "name": "HISTORY_FN", "value": "${history_fn}" },
+        { "name": "SUBMIT_ARGS_MODE", "value": "${submit_args_mode}" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "${log_group}",
+          "awslogs-region": "${aws_region}",
+          "awslogs-stream-prefix": "fabric-bridge"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:4000/health || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}
