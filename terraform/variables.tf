@@ -29,6 +29,17 @@ variable "assign_public_ip" {
   default     = false
 }
 
+variable "runtime_mode" {
+  type        = string
+  description = "Runtime control mode for ECS and EC2 services: up (run) or down (stop)."
+  default     = "up"
+
+  validation {
+    condition     = contains(["up", "down"], lower(var.runtime_mode))
+    error_message = "runtime_mode must be one of: up, down."
+  }
+}
+
 variable "services" {
   type = map(object({
     task_def_path           = optional(string)
@@ -38,6 +49,18 @@ variable "services" {
     enable_exec             = optional(bool, true)
   }))
   description = "Map of service names to task definition JSON paths or templates."
+}
+
+variable "ec2_instance_ids" {
+  type        = list(string)
+  description = "EC2 instances to start/stop with runtime_mode (e.g., RabbitMQ/Fabric VMs)."
+  default     = []
+}
+
+variable "manage_ec2_runtime_state" {
+  type        = bool
+  description = "When true, Terraform will set EC2 instances in ec2_instance_ids to running/stopped based on runtime_mode."
+  default     = true
 }
 
 variable "log_retention_in_days" {

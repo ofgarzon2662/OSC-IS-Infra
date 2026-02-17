@@ -4,8 +4,60 @@ vpc_id           = "<vpc-id>"
 subnet_ids       = ["<subnet-a>", "<subnet-b>"]
 security_group_ids = ["<security-group-id>"]
 assign_public_ip = false
+runtime_mode     = "up" # up | down
+
+# Optional: EC2s to start/stop with runtime_mode
+ec2_instance_ids = ["<instance-id-1>", "<instance-id-2>", "<instance-id-3>"]
+manage_ec2_runtime_state = true
+
+# Safety guardrail for ECS/log resources
+protect_core_services = true
 
 services = {
+  osc-api = {
+    task_def_template_path = "${path.module}/../task-defs/api-gateway.json.tmpl"
+    task_def_vars = {
+      cpu                                     = "512"
+      memory                                  = "1024"
+      execution_role_arn                      = "<execution-role-arn>"
+      task_role_arn                           = "<task-role-arn>"
+      image                                   = "<ecr-image-uri>"
+      submission_listener_service_role        = "<role-name>"
+      db_port                                 = "5432"
+      pgssl_ca_path                           = "/usr/local/share/ca-certificates/aws-rds-combined.crt"
+      admin1_roles                            = "admin"
+      db_ssl_servername                       = "<rds-hostname>"
+      pgsslmode                               = "require"
+      db_name                                 = "<db-name>"
+      jwt_expires_in                          = "10m"
+      admin2_roles                            = "admin"
+      cors_origins                            = "<comma-separated-origins>"
+      db_host                                 = "<rds-hostname>"
+      db_ssl_reject_unauthorized              = "true"
+      admin1_email                            = "<admin1-email>"
+      admin1_username                         = "<admin1-username>"
+      submission_listener_username            = "<listener-username>"
+      db_ssl                                  = "true"
+      admin2_email                            = "<admin2-email>"
+      rabbitmq_port                           = "5672"
+      admin2_username                         = "<admin2-username>"
+      node_env                                = "production"
+      rabbitmq_host                           = "<rabbitmq-host>"
+      ghw_url                                 = "<ghw-url>"
+      admin1_password_secret_arn              = "<secret-arn>"
+      admin2_password_secret_arn              = "<secret-arn>"
+      db_password_secret_arn                  = "<secret-arn>"
+      db_user_secret_arn                      = "<secret-arn>"
+      jwt_secret_arn                          = "<secret-arn>"
+      rabbitmq_pass_secret_arn                = "<secret-arn>"
+      rabbitmq_user_secret_arn                = "<secret-arn>"
+      submission_listener_api_key_secret_arn  = "<secret-arn>"
+      log_group                               = "/ecs/osc-api"
+      aws_region                              = "<aws-region>"
+    }
+    desired_count = 1
+  }
+
   osc-fabric-bridge = {
     task_def_template_path = "${path.module}/../task-defs/fabric-bridge.json.tmpl"
     task_def_vars = {
@@ -23,6 +75,8 @@ services = {
       submitter_email_default    = "<submitter-email>"
       submitter_username_default = "<submitter-username>"
       tls_override_hostname      = "<tls-override-hostname>"
+      discovery_enabled          = "false"
+      discovery_as_localhost     = "false"
       s3_bucket                  = "<s3-bucket>"
       s3_org1_identity_key       = "<s3-key>"
       s3_org1_cert_key           = "<s3-key>"
@@ -35,6 +89,7 @@ services = {
     }
     desired_count = 1
   }
+
   osc-submission-worker = {
     task_def_template_path = "${path.module}/../task-defs/submission-worker.json.tmpl"
     task_def_vars = {
@@ -56,6 +111,106 @@ services = {
       log_group                  = "<log-group>"
       aws_region                 = "<aws-region>"
     }
-    desired_count = 3
+    desired_count = 1
+  }
+
+  osc-submission-listener = {
+    task_def_template_path = "${path.module}/../task-defs/submission-listener.json.tmpl"
+    task_def_vars = {
+      cpu                                           = "256"
+      memory                                        = "512"
+      execution_role_arn                            = "<execution-role-arn>"
+      task_role_arn                                 = "<task-role-arn>"
+      image                                         = "<ecr-image-uri>"
+      rabbitmq_host                                 = "<rabbitmq-host>"
+      rabbitmq_port                                 = "5672"
+      rabbitmq_queue_submitted                      = "<queue-name>"
+      rabbitmq_queue_updated                        = "<queue-name>"
+      api_gateway_url                               = "<api-gateway-url>"
+      environment                                   = "aws"
+      rabbitmq_user_secret_arn                      = "<secret-arn>"
+      rabbitmq_pass_secret_arn                      = "<secret-arn>"
+      submission_listener_api_key_secret_arn        = "<secret-arn>"
+      submission_listener_service_role_secret_arn   = "<secret-arn>"
+      log_group                                     = "/ecs/osc-submission-listener"
+      aws_region                                    = "<aws-region>"
+    }
+    desired_count = 1
+  }
+
+  osc-get-history-worker = {
+    task_def_template_path = "${path.module}/../task-defs/get-history-worker.json.tmpl"
+    task_def_vars = {
+      cpu                = "256"
+      memory             = "512"
+      execution_role_arn = "<execution-role-arn>"
+      task_role_arn      = "<task-role-arn>"
+      image              = "<ecr-image-uri>"
+      bridge_url         = "<fabric-bridge-url>"
+      cache_ttl_seconds  = "300"
+      cache_max_artifacts = "200"
+      max_page_size      = "500"
+      log_group          = "/ecs/osc-get-history-worker"
+      aws_region         = "<aws-region>"
+    }
+    desired_count = 1
   }
 }
+
+# --------------------
+# Hybrid infra hibernation (optional)
+# --------------------
+manage_hybrid_infra = false
+infra_mode          = "active" # active | hibernated
+allow_destroy       = false     # must be true for hibernated mode
+
+# alb = {
+#   name               = "<alb-name>"
+#   internal           = false
+#   security_group_ids = ["<sg-id>"]
+#   subnet_ids         = ["<public-subnet-a>", "<public-subnet-b>"]
+#   listener_port      = 443
+#   listener_protocol  = "HTTPS"
+#   certificate_arn    = "<acm-certificate-arn>"
+#   target_group = {
+#     name              = "<alb-tg-name>"
+#     port              = 3000
+#     protocol          = "HTTP"
+#     target_type       = "ip"
+#     health_check_path = "/api/v1/health"
+#   }
+#   route53_record_name = "api.example.com"
+#   route53_zone_id     = "<hosted-zone-id>"
+# }
+
+# nlb = {
+#   name       = "<nlb-name>"
+#   internal   = false
+#   subnet_ids = ["<public-subnet-a>", "<public-subnet-b>"]
+#   listener_port     = 5672
+#   listener_protocol = "TCP"
+#   target_group = {
+#     name        = "<nlb-tg-name>"
+#     port        = 5672
+#     protocol    = "TCP"
+#     target_type = "ip"
+#   }
+#   route53_record_name = "<broker-record.example.com>"
+#   route53_zone_id     = "<hosted-zone-id>"
+# }
+
+# nat = {
+#   subnet_id               = "<public-subnet-id>"
+#   private_route_table_ids = ["<rtb-private-1>", "<rtb-private-2>"]
+#   create_eip              = true
+# }
+
+# rds = {
+#   identifier                   = "<db-identifier>"
+#   instance_class               = "db.t3.micro"
+#   db_subnet_ids                = ["<private-subnet-a>", "<private-subnet-b>"]
+#   vpc_security_group_ids       = ["<db-sg-id>"]
+#   source_instance_identifier   = "<db-identifier>"
+#   restore_from_latest_snapshot = true
+#   final_snapshot_identifier    = "<db-final-snapshot-id>"
+# }

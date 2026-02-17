@@ -1,0 +1,46 @@
+{
+  "family": "osc-get-history-worker",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "${cpu}",
+  "memory": "${memory}",
+  "executionRoleArn": "${execution_role_arn}",
+  "taskRoleArn": "${task_role_arn}",
+  "containerDefinitions": [
+    {
+      "name": "get-history-worker",
+      "image": "${image}",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8002,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "BRIDGE_URL", "value": "${bridge_url}" },
+        { "name": "CACHE_TTL_SECONDS", "value": "${cache_ttl_seconds}" },
+        { "name": "CACHE_MAX_ARTIFACTS", "value": "${cache_max_artifacts}" },
+        { "name": "MAX_PAGE_SIZE", "value": "${max_page_size}" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "${log_group}",
+          "awslogs-region": "${aws_region}",
+          "awslogs-stream-prefix": "get-history"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "python - <<'PY'\nimport sys,urllib.request\ntry:\n  with urllib.request.urlopen('http://127.0.0.1:8002/health', timeout=3) as r:\n    sys.exit(0 if r.status==200 else 1)\nexcept Exception:\n  sys.exit(1)\nPY"
+        ],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}

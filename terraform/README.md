@@ -1,115 +1,100 @@
-# Terraform baseline (OSC-IS)
+# Terraform Cost-Control (OSC-IS)
 
-This folder provides a baseline for managing ECS services and CloudWatch log groups
-from task definition JSON files or templates in the infra repo.
+This directory now supports two operational layers:
 
-## What this manages
+1. Runtime controls (safe): ECS desired counts + EC2 instance start/stop.
+2. Hybrid deep-sleep (optional): ALB/NLB/NAT/RDS hibernation with restore.
 
-- ECS task definitions (rendered from JSON templates or parsed from JSON files)
+## Managed resources
+
+- ECS task definitions (from templates)
 - ECS services (Fargate, awsvpc)
 - CloudWatch log groups `/ecs/<service-name>`
+- EC2 runtime state (start/stop via `aws_ec2_instance_state`)
+- Optional hybrid infra:
+  - ALB + target group + listener (+ optional Route53 alias)
+  - NLB + target group + listener (+ optional Route53 alias)
+  - NAT Gateway + default routes (+ optional EIP)
+  - RDS restore from snapshot + final snapshot on hibernate delete
 
-## Prereqs
+## Prerequisites
 
 - Terraform >= 1.5
-- AWS credentials with ECS, CloudWatch permissions
-- Existing VPC, subnets, and security groups
+- AWS provider >= 5.x
+- Existing ECS cluster, VPC, subnets, and security groups
+- For hybrid mode: import existing ALB/NLB/NAT/RDS resources (see `IMPORTS.md`)
 
-## Templates vs JSON
+## Modes
 
-You can either point to a raw JSON file (`task_def_path`) or to a template
-(`task_def_template_path`) with a variable map (`task_def_vars`). Templates are
-rendered in memory by Terraform; no JSON file is written to disk unless you add
-an explicit `local_file` resource.
+- `runtime_mode = "up" | "down"`
+  - `up`: ECS services use configured `desired_count`, EC2 instances in `ec2_instance_ids` are running
+  - `down`: ECS services scale to 0, EC2 instances stop
 
-## Example `terraform.tfvars`
+- `infra_mode = "active" | "hibernated"` (only when `manage_hybrid_infra = true`)
+  - `active`: ALB/NLB/NAT/RDS resources exist
+  - `hibernated`: resources are destroyed (destructive)
+  - Safety: `allow_destroy = true` is required for `hibernated`
 
-```
-region           = "<aws-region>"
-ecs_cluster_name = "<ecs-cluster-name>"
-vpc_id           = "<vpc-id>"
-subnet_ids       = ["<subnet-a>", "<subnet-b>"]
-security_group_ids = ["<security-group-id>"]
-assign_public_ip = false
+## Guardrails
 
-services = {
-  osc-fabric-bridge = {
-    task_def_template_path = "${path.module}/../task-defs/fabric-bridge.json.tmpl"
-    task_def_vars = {
-      cpu                        = "256"
-      memory                     = "512"
-      execution_role_arn         = "<execution-role-arn>"
-      task_role_arn              = "<task-role-arn>"
-      image                      = "<ecr-image-uri>"
-      fabric_channel             = "<channel>"
-      fabric_chaincode           = "<chaincode>"
-      fabric_peer                = "<peer-host:port>"
-      peer_endpoint              = "<peer-host:port>"
-      msp_id                     = "<msp-id>"
-      identity_label             = "<identity-label>"
-      submitter_email_default    = "<submitter-email>"
-      submitter_username_default = "<submitter-username>"
-      tls_override_hostname      = "<tls-override-hostname>"
-      s3_bucket                  = "<s3-bucket>"
-      s3_org1_identity_key       = "<s3-key>"
-      s3_org1_cert_key           = "<s3-key>"
-      submit_fn                  = "<submit-fn>"
-      update_fn                  = "<update-fn>"
-      history_fn                 = "<history-fn>"
-      submit_args_mode           = "<submit-args-mode>"
-      log_group                  = "<log-group>"
-      aws_region                 = "<aws-region>"
-    }
-    desired_count = 1
-  }
-  osc-submission-worker = {
-    task_def_template_path = "${path.module}/../task-defs/submission-worker.json.tmpl"
-    task_def_vars = {
-      cpu                        = "512"
-      memory                     = "1024"
-      execution_role_arn         = "<execution-role-arn>"
-      task_role_arn              = "<task-role-arn>"
-      image                      = "<ecr-image-uri>"
-      rabbitmq_queue_updated     = "<queue-name>"
-      rabbitmq_port              = "5672"
-      rabbitmq_queue_submit      = "<queue-name>"
-      environment                = "<env>"
-      fabric_bridge_url          = "<fabric-bridge-url>"
-      rabbitmq_host              = "<rabbitmq-host>"
-      rabbitmq_queue_update      = "<queue-name>"
-      rabbitmq_queue_submitted   = "<queue-name>"
-      rabbitmq_user_secret_arn   = "<secret-arn>"
-      rabbitmq_pass_secret_arn   = "<secret-arn>"
-      log_group                  = "<log-group>"
-      aws_region                 = "<aws-region>"
-    }
-    desired_count = 3
-  }
-  osc-submission-listener = {
-    task_def_path = "${path.module}/../../submission-listener-task-definition.json"
-    desired_count = 1
-  }
-  osc-api = {
-    task_def_path = "${path.module}/../../api-gateway-updated-task-def.json"
-    desired_count = 1
-  }
-  osc-get-history-worker = {
-    task_def_path = "${path.module}/../../OSC-Artifact-Submission/get_history_worker/ghw-task-def.json"
-    desired_count = 1
-  }
-}
+- `protect_core_services = true` (default) sets `prevent_destroy` on ECS services, ECS task definitions, and log groups.
+- `allow_destroy = true` is required to run destructive hibernation mode.
+
+## Task definition templates
+
+All app services are template-driven under `../task-defs`:
+
+- `api-gateway.json.tmpl`
+- `fabric-bridge.json.tmpl`
+- `submission-worker.json.tmpl`
+- `submission-listener.json.tmpl`
+- `get-history-worker.json.tmpl`
+
+Use `terraform.tfvars.example` as the full reference.
+
+## Operator commands
+
+From this `terraform/` directory:
+
+### Bash / Make
+
+```bash
+make init
+make down-runtime
+make up-runtime
+make down-hybrid
+make up-hybrid
+make verify-runtime
 ```
 
-## Workflow
+### PowerShell
 
+```powershell
+./scripts/power.ps1 -Action init
+./scripts/power.ps1 -Action down-runtime
+./scripts/power.ps1 -Action up-runtime
+./scripts/power.ps1 -Action down-hybrid
+./scripts/power.ps1 -Action up-hybrid
+./scripts/power.ps1 -Action verify-runtime
 ```
+
+## Standard workflow
+
+```bash
 terraform init
 terraform plan
 terraform apply
 ```
 
-If any of the ECS services already exist, import them before `apply`:
+## Outputs
 
-```
-terraform import aws_ecs_service.this["osc-fabric-bridge"] <service-arn>
-```
+- ECS service ARNs
+- Task definition ARNs
+- Effective ECS desired counts
+- Managed EC2 runtime states
+- Optional ALB/NLB/NAT/RDS identifiers
+
+## Import and ownership boundaries
+
+Before using hybrid hibernation for existing infra, import resources into state.
+See: `IMPORTS.md`.

@@ -1,0 +1,79 @@
+{
+  "family": "osc-api",
+  "networkMode": "awsvpc",
+  "taskRoleArn": "${task_role_arn}",
+  "executionRoleArn": "${execution_role_arn}",
+  "cpu": "${cpu}",
+  "memory": "${memory}",
+  "requiresCompatibilities": ["FARGATE"],
+  "containerDefinitions": [
+    {
+      "name": "osc-api-gateway",
+      "image": "${image}",
+      "cpu": 0,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "hostPort": 3000,
+          "protocol": "tcp",
+          "name": "osc-api-gateway-3000-tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "essential": true,
+      "environment": [
+        { "name": "SUBMISSION_LISTENER_SERVICE_ROLE", "value": "${submission_listener_service_role}" },
+        { "name": "DB_PORT", "value": "${db_port}" },
+        { "name": "PGSSL_CA_PATH", "value": "${pgssl_ca_path}" },
+        { "name": "ADMIN1_ROLES", "value": "${admin1_roles}" },
+        { "name": "DB_SSL_SERVERNAME", "value": "${db_ssl_servername}" },
+        { "name": "PGSSLMODE", "value": "${pgsslmode}" },
+        { "name": "DB_NAME", "value": "${db_name}" },
+        { "name": "JWT_EXPIRES_IN", "value": "${jwt_expires_in}" },
+        { "name": "ADMIN2_ROLES", "value": "${admin2_roles}" },
+        { "name": "CORS_ORIGINS", "value": "${cors_origins}" },
+        { "name": "DB_HOST", "value": "${db_host}" },
+        { "name": "DB_SSL_REJECT_UNAUTHORIZED", "value": "${db_ssl_reject_unauthorized}" },
+        { "name": "ADMIN1_EMAIL", "value": "${admin1_email}" },
+        { "name": "ADMIN1_USERNAME", "value": "${admin1_username}" },
+        { "name": "SUBMISSION_LISTENER_USERNAME", "value": "${submission_listener_username}" },
+        { "name": "DB_SSL", "value": "${db_ssl}" },
+        { "name": "ADMIN2_EMAIL", "value": "${admin2_email}" },
+        { "name": "RABBITMQ_PORT", "value": "${rabbitmq_port}" },
+        { "name": "ADMIN2_USERNAME", "value": "${admin2_username}" },
+        { "name": "NODE_ENV", "value": "${node_env}" },
+        { "name": "RABBITMQ_HOST", "value": "${rabbitmq_host}" },
+        { "name": "GHW_URL", "value": "${ghw_url}" }
+      ],
+      "secrets": [
+        { "name": "ADMIN1_PASSWORD", "valueFrom": "${admin1_password_secret_arn}" },
+        { "name": "ADMIN2_PASSWORD", "valueFrom": "${admin2_password_secret_arn}" },
+        { "name": "DB_PASSWORD", "valueFrom": "${db_password_secret_arn}" },
+        { "name": "DB_USER", "valueFrom": "${db_user_secret_arn}" },
+        { "name": "JWT_SECRET", "valueFrom": "${jwt_secret_arn}" },
+        { "name": "RABBITMQ_PASS", "valueFrom": "${rabbitmq_pass_secret_arn}" },
+        { "name": "RABBITMQ_USER", "valueFrom": "${rabbitmq_user_secret_arn}" },
+        { "name": "SUBMISSION_LISTENER_API_KEY", "valueFrom": "${submission_listener_api_key_secret_arn}" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "${log_group}",
+          "awslogs-create-group": "true",
+          "awslogs-region": "${aws_region}",
+          "awslogs-stream-prefix": "osc-api"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "curl -f http://localhost:3000/api/v1/health || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 40
+      }
+    }
+  ]
+}
