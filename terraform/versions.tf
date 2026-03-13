@@ -1,5 +1,14 @@
 terraform {
   required_version = ">= 1.5.0"
+
+  backend "s3" {
+    bucket         = "osc-is-terraform-state"
+    key            = "osc-staging/terraform.tfstate"
+    region         = "us-west-2"
+    encrypt        = true
+    dynamodb_table = "osc-is-terraform-locks"
+  }
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"

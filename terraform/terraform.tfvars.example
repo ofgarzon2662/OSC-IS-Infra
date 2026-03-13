@@ -1,20 +1,25 @@
-region           = "<aws-region>"
-ecs_cluster_name = "<ecs-cluster-name>"
+region           = "us-west-2"
+ecs_cluster_name = "osc-staging"
 vpc_id           = "<vpc-id>"
-subnet_ids       = ["<subnet-a>", "<subnet-b>"]
-security_group_ids = ["<security-group-id>"]
+subnet_ids       = ["<private-subnet-2a>", "<private-subnet-2b>"]
+security_group_ids = ["<ecs-tasks-sg-id>"]
 assign_public_ip = false
 runtime_mode     = "up" # up | down
 
-# Optional: EC2s to start/stop with runtime_mode
-ec2_instance_ids = ["<instance-id-1>", "<instance-id-2>", "<instance-id-3>"]
+# Single RabbitMQ EC2 (MVP — one broker is sufficient)
+ec2_instance_ids         = ["<rabbitmq-ec2-instance-id>"]
 manage_ec2_runtime_state = true
 
-# Safety guardrail for ECS/log resources
+# Safety guardrail: prevents accidental destroy of ECS services/task defs/log groups
 protect_core_services = true
 
+# --------------------
+# ECS Services
+# NOTE: service keys must match the actual ECS service names in the cluster
+# --------------------
 services = {
-  osc-api = {
+  # API Gateway — named osc-api-blue (blue/green deployment)
+  "osc-api-blue" = {
     task_def_template_path = "${path.module}/../task-defs/api-gateway.json.tmpl"
     task_def_vars = {
       cpu                                     = "512"
@@ -42,8 +47,8 @@ services = {
       rabbitmq_port                           = "5672"
       admin2_username                         = "<admin2-username>"
       node_env                                = "production"
-      rabbitmq_host                           = "<rabbitmq-host>"
-      ghw_url                                 = "<ghw-url>"
+      rabbitmq_host                           = "<rabbitmq-nlb-dns>"
+      ghw_url                                 = "http://osc-get-history-worker:8002"
       admin1_password_secret_arn              = "<secret-arn>"
       admin2_password_secret_arn              = "<secret-arn>"
       db_password_secret_arn                  = "<secret-arn>"
@@ -52,45 +57,36 @@ services = {
       rabbitmq_pass_secret_arn                = "<secret-arn>"
       rabbitmq_user_secret_arn                = "<secret-arn>"
       submission_listener_api_key_secret_arn  = "<secret-arn>"
-      log_group                               = "/ecs/osc-api"
-      aws_region                              = "<aws-region>"
+      log_group                               = "/ecs/osc-api-blue"
+      aws_region                              = "us-west-2"
     }
     desired_count = 1
   }
 
-  osc-fabric-bridge = {
-    task_def_template_path = "${path.module}/../task-defs/fabric-bridge.json.tmpl"
+  # Adapter — replaces fabric-bridge for blockchain communication
+  # Calls OSC-API (PHP) on OSC-DEV2 via HTTPS Bearer token
+  # Adapter — calls OSC-API (PHP) on OSC-DEV2 via HTTPS Bearer token
+  # ADAPTER_API_URL and ADAPTER_API_TOKEN are stored in Secrets Manager (not plain env vars)
+  "osc-adapter" = {
+    task_def_template_path = "${path.module}/../task-defs/adapter.json.tmpl"
     task_def_vars = {
-      cpu                        = "256"
-      memory                     = "512"
-      execution_role_arn         = "<execution-role-arn>"
-      task_role_arn              = "<task-role-arn>"
-      image                      = "<ecr-image-uri>"
-      fabric_channel             = "<channel>"
-      fabric_chaincode           = "<chaincode>"
-      fabric_peer                = "<peer-host:port>"
-      peer_endpoint              = "<peer-host:port>"
-      msp_id                     = "<msp-id>"
-      identity_label             = "<identity-label>"
-      submitter_email_default    = "<submitter-email>"
-      submitter_username_default = "<submitter-username>"
-      tls_override_hostname      = "<tls-override-hostname>"
-      discovery_enabled          = "false"
-      discovery_as_localhost     = "false"
-      s3_bucket                  = "<s3-bucket>"
-      s3_org1_identity_key       = "<s3-key>"
-      s3_org1_cert_key           = "<s3-key>"
-      submit_fn                  = "<submit-fn>"
-      update_fn                  = "<update-fn>"
-      history_fn                 = "<history-fn>"
-      submit_args_mode           = "<submit-args-mode>"
-      log_group                  = "<log-group>"
-      aws_region                 = "<aws-region>"
+      cpu                             = "256"
+      memory                          = "512"
+      execution_role_arn              = "<execution-role-arn>"
+      task_role_arn                   = "<task-role-arn>"
+      image                           = "<ecr-image-uri>"
+      adapter_port                    = "5000"
+      adapter_request_timeout_seconds = "30"
+      adapter_api_url_secret_arn      = "<secret-arn>"   # /osc/<env>/adapter/api-url
+      adapter_api_token_secret_arn    = "<secret-arn>"   # /osc/<env>/adapter/api-token
+      log_group                       = "/ecs/osc-adapter"
+      aws_region                      = "us-west-2"
     }
     desired_count = 1
   }
 
-  osc-submission-worker = {
+  # Submission Worker — consumes artifact.submit / artifact.update from RabbitMQ
+  "osc-submission-worker" = {
     task_def_template_path = "${path.module}/../task-defs/submission-worker.json.tmpl"
     task_def_vars = {
       cpu                        = "512"
@@ -98,23 +94,24 @@ services = {
       execution_role_arn         = "<execution-role-arn>"
       task_role_arn              = "<task-role-arn>"
       image                      = "<ecr-image-uri>"
-      rabbitmq_queue_updated     = "<queue-name>"
+      rabbitmq_queue_submit      = "artifact.submit.queue"
+      rabbitmq_queue_submitted   = "artifact.submitted.queue"
+      rabbitmq_queue_update      = "artifact.update.queue"
+      rabbitmq_queue_updated     = "artifact.updated.queue"
       rabbitmq_port              = "5672"
-      rabbitmq_queue_submit      = "<queue-name>"
-      environment                = "<env>"
-      fabric_bridge_url          = "<fabric-bridge-url>"
-      rabbitmq_host              = "<rabbitmq-host>"
-      rabbitmq_queue_update      = "<queue-name>"
-      rabbitmq_queue_submitted   = "<queue-name>"
+      rabbitmq_host              = "<rabbitmq-nlb-dns>"
+      fabric_bridge_url          = "http://osc-adapter:5000"     # Points to adapter, not fabric-bridge
+      environment                = "aws"
       rabbitmq_user_secret_arn   = "<secret-arn>"
       rabbitmq_pass_secret_arn   = "<secret-arn>"
-      log_group                  = "<log-group>"
-      aws_region                 = "<aws-region>"
+      log_group                  = "/ecs/osc-submission-worker"
+      aws_region                 = "us-west-2"
     }
     desired_count = 1
   }
 
-  osc-submission-listener = {
+  # Submission Listener — consumes results and PATCHes API Gateway
+  "osc-submission-listener" = {
     task_def_template_path = "${path.module}/../task-defs/submission-listener.json.tmpl"
     task_def_vars = {
       cpu                                           = "256"
@@ -122,95 +119,101 @@ services = {
       execution_role_arn                            = "<execution-role-arn>"
       task_role_arn                                 = "<task-role-arn>"
       image                                         = "<ecr-image-uri>"
-      rabbitmq_host                                 = "<rabbitmq-host>"
+      rabbitmq_host                                 = "<rabbitmq-nlb-dns>"
       rabbitmq_port                                 = "5672"
-      rabbitmq_queue_submitted                      = "<queue-name>"
-      rabbitmq_queue_updated                        = "<queue-name>"
-      api_gateway_url                               = "<api-gateway-url>"
+      rabbitmq_queue_submitted                      = "artifact.submitted.queue"
+      rabbitmq_queue_updated                        = "artifact.updated.queue"
+      api_gateway_url                               = "http://osc-api-blue:3000/api/v1/artifacts"
       environment                                   = "aws"
       rabbitmq_user_secret_arn                      = "<secret-arn>"
       rabbitmq_pass_secret_arn                      = "<secret-arn>"
       submission_listener_api_key_secret_arn        = "<secret-arn>"
       submission_listener_service_role_secret_arn   = "<secret-arn>"
       log_group                                     = "/ecs/osc-submission-listener"
-      aws_region                                    = "<aws-region>"
+      aws_region                                    = "us-west-2"
     }
     desired_count = 1
   }
 
-  osc-get-history-worker = {
+  # Get History Worker — proxies history requests to adapter
+  "osc-get-history-worker" = {
     task_def_template_path = "${path.module}/../task-defs/get-history-worker.json.tmpl"
     task_def_vars = {
-      cpu                = "256"
-      memory             = "512"
-      execution_role_arn = "<execution-role-arn>"
-      task_role_arn      = "<task-role-arn>"
-      image              = "<ecr-image-uri>"
-      bridge_url         = "<fabric-bridge-url>"
-      cache_ttl_seconds  = "300"
+      cpu                 = "256"
+      memory              = "512"
+      execution_role_arn  = "<execution-role-arn>"
+      task_role_arn       = "<task-role-arn>"
+      image               = "<ecr-image-uri>"
+      bridge_url          = "http://osc-adapter:5000"            # Points to adapter, not fabric-bridge
+      cache_ttl_seconds   = "300"
       cache_max_artifacts = "200"
-      max_page_size      = "500"
-      log_group          = "/ecs/osc-get-history-worker"
-      aws_region         = "<aws-region>"
+      max_page_size       = "500"
+      log_group           = "/ecs/osc-get-history-worker"
+      aws_region          = "us-west-2"
     }
     desired_count = 1
   }
 }
 
 # --------------------
-# Hybrid infra hibernation (optional)
+# Hybrid infra hibernation
+# Set manage_hybrid_infra=true once ALB/NLB/NAT/RDS are imported into state.
+# Use `make down-hybrid` to destroy expensive resources and reach ~$0/day.
+# Use `make up-hybrid` to restore from RDS snapshot and recreate all resources.
 # --------------------
-manage_hybrid_infra = false
-infra_mode          = "active" # active | hibernated
-allow_destroy       = false     # must be true for hibernated mode
+manage_hybrid_infra = true
+infra_mode          = "active"   # active | hibernated
+allow_destroy       = false      # must be true for infra_mode=hibernated
 
-# alb = {
-#   name               = "<alb-name>"
-#   internal           = false
-#   security_group_ids = ["<sg-id>"]
-#   subnet_ids         = ["<public-subnet-a>", "<public-subnet-b>"]
-#   listener_port      = 443
-#   listener_protocol  = "HTTPS"
-#   certificate_arn    = "<acm-certificate-arn>"
-#   target_group = {
-#     name              = "<alb-tg-name>"
-#     port              = 3000
-#     protocol          = "HTTP"
-#     target_type       = "ip"
-#     health_check_path = "/api/v1/health"
-#   }
-#   route53_record_name = "api.example.com"
-#   route53_zone_id     = "<hosted-zone-id>"
-# }
+alb = {
+  name                       = "osc-staging-alb"
+  internal                   = false
+  security_group_ids         = ["<alb-sg-id>"]
+  subnet_ids                 = ["<public-subnet-2a>", "<public-subnet-2b>"]
+  idle_timeout               = 60
+  enable_deletion_protection = false
+  listener_port              = 443
+  listener_protocol          = "HTTPS"
+  certificate_arn            = "<acm-certificate-arn>"
+  target_group = {
+    name              = "osc-api-blue-2-tg"
+    port              = 3000
+    protocol          = "HTTP"
+    target_type       = "ip"
+    health_check_path = "/api/v1/health"
+  }
+  route53_record_name = "<api.your-domain.com>"
+  route53_zone_id     = "<hosted-zone-id>"
+}
 
-# nlb = {
-#   name       = "<nlb-name>"
-#   internal   = false
-#   subnet_ids = ["<public-subnet-a>", "<public-subnet-b>"]
-#   listener_port     = 5672
-#   listener_protocol = "TCP"
-#   target_group = {
-#     name        = "<nlb-tg-name>"
-#     port        = 5672
-#     protocol    = "TCP"
-#     target_type = "ip"
-#   }
-#   route53_record_name = "<broker-record.example.com>"
-#   route53_zone_id     = "<hosted-zone-id>"
-# }
+nlb = {
+  name          = "osc-rabbitmq-nlb"
+  internal      = true
+  subnet_ids    = ["<private-subnet-2a>", "<private-subnet-2b>"]
+  listener_port     = 5672
+  listener_protocol = "TCP"
+  target_group = {
+    name        = "osc-rabbitmq-tg"
+    port        = 5672
+    protocol    = "TCP"
+    target_type = "ip"
+  }
+}
 
-# nat = {
-#   subnet_id               = "<public-subnet-id>"
-#   private_route_table_ids = ["<rtb-private-1>", "<rtb-private-2>"]
-#   create_eip              = true
-# }
+nat = {
+  subnet_id               = "<public-subnet-2a>"
+  private_route_table_ids = ["<private-rtb-2a>", "<private-rtb-2b>"]
+  create_eip              = true
+}
 
-# rds = {
-#   identifier                   = "<db-identifier>"
-#   instance_class               = "db.t3.micro"
-#   db_subnet_ids                = ["<private-subnet-a>", "<private-subnet-b>"]
-#   vpc_security_group_ids       = ["<db-sg-id>"]
-#   source_instance_identifier   = "<db-identifier>"
-#   restore_from_latest_snapshot = true
-#   final_snapshot_identifier    = "<db-final-snapshot-id>"
-# }
+rds = {
+  identifier                      = "oscdb"
+  instance_class                  = "db.t4g.micro"
+  db_subnet_ids                   = ["<private-subnet-2a>", "<private-subnet-2b>"]
+  vpc_security_group_ids          = ["<rds-sg-id>"]
+  publicly_accessible             = false
+  multi_az                        = false
+  deletion_protection             = false
+  restore_from_latest_snapshot    = true
+  final_snapshot_identifier       = "oscdb-hibernate-snapshot"
+}

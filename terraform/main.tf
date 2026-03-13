@@ -39,7 +39,7 @@ resource "aws_cloudwatch_log_group" "ecs" {
   retention_in_days = var.log_retention_in_days
 
   lifecycle {
-    prevent_destroy = var.protect_core_services
+    prevent_destroy = true
   }
 }
 
@@ -56,7 +56,7 @@ resource "aws_ecs_task_definition" "this" {
   container_definitions    = jsonencode(each.value.containerDefinitions)
 
   lifecycle {
-    prevent_destroy = var.protect_core_services
+    prevent_destroy = true
   }
 }
 
@@ -77,7 +77,7 @@ resource "aws_ecs_service" "this" {
   }
 
   lifecycle {
-    prevent_destroy = var.protect_core_services
+    prevent_destroy = true
   }
 }
 

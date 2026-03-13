@@ -1,0 +1,55 @@
+{
+  "family": "osc-adapter",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "${cpu}",
+  "memory": "${memory}",
+  "executionRoleArn": "${execution_role_arn}",
+  "taskRoleArn": "${task_role_arn}",
+  "containerDefinitions": [
+    {
+      "name": "osc-adapter",
+      "image": "${image}",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 5000,
+          "protocol": "tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "environment": [
+        { "name": "ADAPTER_PORT", "value": "${adapter_port}" },
+        { "name": "ADAPTER_REQUEST_TIMEOUT_SECONDS", "value": "${adapter_request_timeout_seconds}" }
+      ],
+      "secrets": [
+        {
+          "name": "ADAPTER_API_URL",
+          "valueFrom": "${adapter_api_url_secret_arn}"
+        },
+        {
+          "name": "ADAPTER_API_TOKEN",
+          "valueFrom": "${adapter_api_token_secret_arn}"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "${log_group}",
+          "awslogs-region": "${aws_region}",
+          "awslogs-stream-prefix": "osc-adapter"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "curl -f http://localhost:5000/health || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 40
+      }
+    }
+  ]
+}

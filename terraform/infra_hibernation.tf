@@ -7,13 +7,17 @@ locals {
 }
 
 check "confirm_hibernation_destroy" {
-  assert        = !local.infra_hibernated || var.allow_destroy
-  error_message = "infra_mode=hibernated is destructive. Set allow_destroy=true to proceed."
+  assert {
+    condition     = !local.infra_hibernated || var.allow_destroy
+    error_message = "infra_mode=hibernated is destructive. Set allow_destroy=true to proceed."
+  }
 }
 
 check "rds_final_snapshot_required" {
-  assert = !local.infra_hibernated || var.rds == null || try(var.rds.final_snapshot_identifier, null) != null
-  error_message = "When hibernating RDS, set rds.final_snapshot_identifier to avoid accidental snapshot naming conflicts."
+  assert {
+    condition     = !local.infra_hibernated || var.rds == null || try(var.rds.final_snapshot_identifier, null) != null
+    error_message = "When hibernating RDS, set rds.final_snapshot_identifier to avoid accidental snapshot naming conflicts."
+  }
 }
 
 resource "aws_lb_target_group" "alb" {
