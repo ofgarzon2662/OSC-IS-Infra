@@ -57,6 +57,10 @@ resource "aws_ecs_task_definition" "this" {
 
   lifecycle {
     prevent_destroy = true
+    # Task definition config (image, env vars, cpu, memory) is managed by CI/CD.
+    # Terraform imports task defs to track their ARN in state but never replaces them.
+    # Use the deployment pipeline to push new task definition revisions.
+    ignore_changes = all
   }
 }
 

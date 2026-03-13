@@ -150,10 +150,10 @@ data "aws_db_snapshot" "latest" {
 }
 
 locals {
-  rds_snapshot_identifier = local.infra_active && var.rds != null ? coalesce(
+  rds_snapshot_identifier = local.infra_active && var.rds != null ? try(coalesce(
     try(var.rds.restore_snapshot_identifier, null),
     try(data.aws_db_snapshot.latest[0].id, null)
-  ) : null
+  ), null) : null
 }
 
 resource "aws_db_instance" "this" {

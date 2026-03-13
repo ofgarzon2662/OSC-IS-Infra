@@ -46,7 +46,7 @@ variable "services" {
     task_def_template_path  = optional(string)
     task_def_vars           = optional(map(string), {})
     desired_count           = number
-    enable_exec             = optional(bool, true)
+    enable_exec             = optional(bool, false)
   }))
   description = "Map of service names to task definition JSON paths or templates."
 }

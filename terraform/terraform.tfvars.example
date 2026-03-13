@@ -20,7 +20,7 @@ protect_core_services = true
 services = {
   # API Gateway — named osc-api-blue (blue/green deployment)
   "osc-api-blue" = {
-    task_def_template_path = "${path.module}/../task-defs/api-gateway.json.tmpl"
+    task_def_template_path = "../task-defs/api-gateway.json.tmpl"
     task_def_vars = {
       cpu                                     = "512"
       memory                                  = "1024"
@@ -68,7 +68,7 @@ services = {
   # Adapter — calls OSC-API (PHP) on OSC-DEV2 via HTTPS Bearer token
   # ADAPTER_API_URL and ADAPTER_API_TOKEN are stored in Secrets Manager (not plain env vars)
   "osc-adapter" = {
-    task_def_template_path = "${path.module}/../task-defs/adapter.json.tmpl"
+    task_def_template_path = "../task-defs/adapter.json.tmpl"
     task_def_vars = {
       cpu                             = "256"
       memory                          = "512"
@@ -87,7 +87,7 @@ services = {
 
   # Submission Worker — consumes artifact.submit / artifact.update from RabbitMQ
   "osc-submission-worker" = {
-    task_def_template_path = "${path.module}/../task-defs/submission-worker.json.tmpl"
+    task_def_template_path = "../task-defs/submission-worker.json.tmpl"
     task_def_vars = {
       cpu                        = "512"
       memory                     = "1024"
@@ -112,7 +112,7 @@ services = {
 
   # Submission Listener — consumes results and PATCHes API Gateway
   "osc-submission-listener" = {
-    task_def_template_path = "${path.module}/../task-defs/submission-listener.json.tmpl"
+    task_def_template_path = "../task-defs/submission-listener.json.tmpl"
     task_def_vars = {
       cpu                                           = "256"
       memory                                        = "512"
@@ -137,7 +137,7 @@ services = {
 
   # Get History Worker — proxies history requests to adapter
   "osc-get-history-worker" = {
-    task_def_template_path = "${path.module}/../task-defs/get-history-worker.json.tmpl"
+    task_def_template_path = "../task-defs/get-history-worker.json.tmpl"
     task_def_vars = {
       cpu                 = "256"
       memory              = "512"
