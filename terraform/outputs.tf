@@ -47,5 +47,16 @@ output "rds_endpoint" {
 }
 
 output "rds_master_secret_arn" {
-  value = try(aws_db_instance.this[0].master_user_secret[0].secret_arn, null)
+  description = "ARN of the Terraform-managed Secrets Manager secret for DB master credentials."
+  value       = try(aws_secretsmanager_secret.db_master[0].arn, null)
+}
+
+output "db_private_fqdn" {
+  description = "Private DNS name for the RDS instance (db.osc-infra.local)."
+  value       = try(aws_route53_record.rds_private[0].fqdn, null)
+}
+
+output "rabbitmq_private_fqdn" {
+  description = "Private DNS name for the RabbitMQ NLB (rabbitmq.osc-infra.local)."
+  value       = try(aws_route53_record.rabbitmq_private[0].fqdn, null)
 }

@@ -70,6 +70,8 @@ variable "nlb" {
     route53_record_name = optional(string)
     route53_zone_id     = optional(string)
     tags                = optional(map(string), {})
+    # Private DNS record added to the RDS private zone (e.g. "rabbitmq" → rabbitmq.osc-infra.local)
+    private_dns_record  = optional(string, "rabbitmq")
   })
   default = null
 }
@@ -110,7 +112,10 @@ variable "rds" {
     allocated_storage               = optional(number)
     db_name                         = optional(string)
     username                        = optional(string)
-    manage_master_user_password     = optional(bool, false)
+    # Terraform-managed master credentials — stable secret name, stable ARN across hibernation
+    master_secret_name              = optional(string, "osc/stg/db/master")
+    # Skip final snapshot on destroy (safe default for dev)
+    skip_final_snapshot             = optional(bool, true)
     # Private DNS (Terraform creates a new private zone — do not use Cloud Map zones)
     private_zone_name               = optional(string)   # e.g. "osc-infra.local"
     private_dns_record              = optional(string, "db")

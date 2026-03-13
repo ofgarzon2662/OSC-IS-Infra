@@ -15,8 +15,8 @@ check "confirm_hibernation_destroy" {
 
 check "rds_final_snapshot_required" {
   assert {
-    condition     = !local.infra_hibernated || var.rds == null || try(var.rds.final_snapshot_identifier, null) != null
-    error_message = "When hibernating RDS, set rds.final_snapshot_identifier to avoid accidental snapshot naming conflicts."
+    condition     = !local.infra_hibernated || var.rds == null || try(var.rds.skip_final_snapshot, true) || try(var.rds.final_snapshot_identifier, null) != null
+    error_message = "When hibernating RDS with skip_final_snapshot=false, set rds.final_snapshot_identifier to avoid naming conflicts."
   }
 }
 
@@ -135,6 +135,45 @@ resource "aws_route" "private_default_ipv4" {
   nat_gateway_id         = aws_nat_gateway.this[0].id
 }
 
+# ---------------------------------------------------------------------------
+# Stable DB master credentials
+# NOT conditional on infra_active so the secret (and its ARN) persists through
+# hibernation cycles. The ARN in ECS task definitions stays valid without any
+# task-def update after a bring-up.
+# ---------------------------------------------------------------------------
+resource "random_password" "db_master" {
+  count  = var.rds != null ? 1 : 0
+  length = 32
+  # Exclude chars that break PostgreSQL connection strings or shell quoting
+  special          = true
+  override_special = "!#%&*()-_=+[]{};<>?"
+  keepers = {
+    # Regenerate only if the DB identifier changes
+    rds_identifier = var.rds.identifier
+  }
+}
+
+resource "aws_secretsmanager_secret" "db_master" {
+  count                   = var.rds != null ? 1 : 0
+  name                    = var.rds.master_secret_name
+  # Allow immediate deletion so make down + make up works without waiting
+  # for the default 7-day recovery window
+  recovery_window_in_days = 0
+}
+
+resource "aws_secretsmanager_secret_version" "db_master" {
+  count     = var.rds != null ? 1 : 0
+  secret_id = aws_secretsmanager_secret.db_master[0].id
+  secret_string = jsonencode({
+    username = var.rds.username
+    password = random_password.db_master[0].result
+  })
+  lifecycle {
+    # Don't overwrite the secret if it was rotated outside Terraform
+    ignore_changes = [secret_string]
+  }
+}
+
 resource "aws_db_subnet_group" "this" {
   count      = local.infra_active && var.rds != null && try(var.rds.db_subnet_group_name, null) == null ? 1 : 0
   name       = "${var.rds.identifier}-subnet-group"
@@ -165,17 +204,17 @@ resource "aws_db_instance" "this" {
   engine                      = try(var.rds.engine, null)
   engine_version              = try(var.rds.engine_version, null)
   allocated_storage           = try(var.rds.allocated_storage, null)
-  db_name                     = try(var.rds.db_name, null)
-  username                    = try(var.rds.username, null)
-  manage_master_user_password = try(var.rds.manage_master_user_password, false)
-  db_subnet_group_name        = try(var.rds.db_subnet_group_name, null) != null ? var.rds.db_subnet_group_name : aws_db_subnet_group.this[0].name
-  vpc_security_group_ids      = var.rds.vpc_security_group_ids
+  db_name                = try(var.rds.db_name, null)
+  username               = try(var.rds.username, null)
+  password               = random_password.db_master[0].result
+  db_subnet_group_name   = try(var.rds.db_subnet_group_name, null) != null ? var.rds.db_subnet_group_name : aws_db_subnet_group.this[0].name
+  vpc_security_group_ids = var.rds.vpc_security_group_ids
   publicly_accessible         = try(var.rds.publicly_accessible, false)
   multi_az                    = try(var.rds.multi_az, false)
   deletion_protection         = try(var.rds.deletion_protection, false)
   apply_immediately           = try(var.rds.apply_immediately, true)
-  skip_final_snapshot         = false
-  final_snapshot_identifier = coalesce(
+  skip_final_snapshot       = try(var.rds.skip_final_snapshot, true)
+  final_snapshot_identifier = try(var.rds.skip_final_snapshot, true) ? null : coalesce(
     try(var.rds.final_snapshot_identifier, null),
     "${var.rds.identifier}-final-snapshot"
   )
@@ -198,4 +237,16 @@ resource "aws_route53_record" "rds_private" {
   type    = "CNAME"
   ttl     = 60
   records = [aws_db_instance.this[0].address]
+}
+
+# Stable private DNS for RabbitMQ NLB — rabbitmq.osc-infra.local
+# Reuses the same private zone as RDS so one zone covers all internal infra.
+# NOTE: requires rds.private_zone_name to be set.
+resource "aws_route53_record" "rabbitmq_private" {
+  count   = local.infra_active && var.nlb != null && try(var.rds.private_zone_name, null) != null ? 1 : 0
+  zone_id = aws_route53_zone.rds_private[0].zone_id
+  name    = try(var.nlb.private_dns_record, "rabbitmq")
+  type    = "CNAME"
+  ttl     = 60
+  records = [aws_lb.nlb[0].dns_name]
 }

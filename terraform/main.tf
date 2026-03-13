@@ -19,16 +19,39 @@ locals {
   managed_ec2_instances = var.manage_ec2_runtime_state ? {
     for id in var.ec2_instance_ids : id => id
   } : {}
+}
+
+locals {
+  # Infra-derived overrides injected into every task-def template.
+  # Values come from live Terraform resources so they are always correct on
+  # a fresh deploy — no hardcoding, no two-pass apply.
+  #
+  # Security notes:
+  #   - db_host uses a private Route53 CNAME (osc-infra.local) — never public.
+  #   - db_ssl_servername uses the actual RDS endpoint for TLS CN verification.
+  #   - DB credentials are stored in Secrets Manager (stable name, stable ARN).
+  #   - rabbitmq_host uses a private Route53 CNAME — NLB is internal-only.
+  #
+  # Hibernation note: when infra_mode=hibernated the RDS/NLB/Route53 resources
+  # are destroyed; try() falls back to "". Task defs keep prior values via
+  # ignore_changes=all and services run at desired_count=0, so no impact.
+  infra_overrides = {
+    db_host                = try(aws_route53_record.rds_private[0].fqdn, "")
+    db_ssl_servername      = try(aws_db_instance.this[0].address, "")
+    db_password_secret_arn = try("${aws_secretsmanager_secret.db_master[0].arn}:password::", "")
+    db_user_secret_arn     = try("${aws_secretsmanager_secret.db_master[0].arn}:username::", "")
+    rabbitmq_host          = try(aws_route53_record.rabbitmq_private[0].fqdn, "")
+  }
 
   service_defs = {
     for name, cfg in var.services :
     name => jsondecode(
       (
         try(
-          templatefile(cfg.task_def_template_path, cfg.task_def_vars),
+          templatefile(cfg.task_def_template_path, merge(cfg.task_def_vars, local.infra_overrides)),
           ""
         ) != ""
-      ) ? templatefile(cfg.task_def_template_path, cfg.task_def_vars) : file(cfg.task_def_path)
+      ) ? templatefile(cfg.task_def_template_path, merge(cfg.task_def_vars, local.infra_overrides)) : file(cfg.task_def_path)
     )
   }
 }
