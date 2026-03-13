@@ -165,6 +165,7 @@ resource "aws_db_instance" "this" {
   engine                      = try(var.rds.engine, null)
   engine_version              = try(var.rds.engine_version, null)
   allocated_storage           = try(var.rds.allocated_storage, null)
+  db_name                     = try(var.rds.db_name, null)
   username                    = try(var.rds.username, null)
   manage_master_user_password = try(var.rds.manage_master_user_password, false)
   db_subnet_group_name        = try(var.rds.db_subnet_group_name, null) != null ? var.rds.db_subnet_group_name : aws_db_subnet_group.this[0].name
@@ -181,10 +182,19 @@ resource "aws_db_instance" "this" {
   tags = try(var.rds.tags, {})
 }
 
+resource "aws_route53_zone" "rds_private" {
+  count = local.infra_active && var.rds != null && try(var.rds.private_zone_name, null) != null ? 1 : 0
+  name  = var.rds.private_zone_name
+
+  vpc {
+    vpc_id = var.vpc_id
+  }
+}
+
 resource "aws_route53_record" "rds_private" {
-  count   = local.infra_active && var.rds != null && try(var.rds.private_zone_id, null) != null ? 1 : 0
-  zone_id = var.rds.private_zone_id
-  name    = var.rds.private_dns_name
+  count   = local.infra_active && var.rds != null && try(var.rds.private_zone_name, null) != null ? 1 : 0
+  zone_id = aws_route53_zone.rds_private[0].zone_id
+  name    = var.rds.private_dns_record
   type    = "CNAME"
   ttl     = 60
   records = [aws_db_instance.this[0].address]

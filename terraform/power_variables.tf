@@ -108,11 +108,12 @@ variable "rds" {
     engine                          = optional(string)
     engine_version                  = optional(string)
     allocated_storage               = optional(number)
+    db_name                         = optional(string)
     username                        = optional(string)
     manage_master_user_password     = optional(bool, false)
-    # Private DNS
-    private_zone_id                 = optional(string)
-    private_dns_name                = optional(string, "db.osc-staging.local")
+    # Private DNS (Terraform creates a new private zone — do not use Cloud Map zones)
+    private_zone_name               = optional(string)   # e.g. "osc-infra.local"
+    private_dns_record              = optional(string, "db")
   })
   default = null
 }
