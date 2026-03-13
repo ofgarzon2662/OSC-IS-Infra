@@ -103,6 +103,13 @@ resource "aws_ecs_service" "this" {
     assign_public_ip = var.assign_public_ip
   }
 
+  dynamic "service_registries" {
+    for_each = try(each.value.cloud_map_service_arn, null) != null ? [1] : []
+    content {
+      registry_arn = each.value.cloud_map_service_arn
+    }
+  }
+
   dynamic "load_balancer" {
     for_each = try(each.value.alb_container_name, null) != null && local.infra_active && var.alb != null ? [1] : []
     content {

@@ -87,7 +87,10 @@ resource "aws_lb" "nlb" {
   internal           = var.nlb.internal
   load_balancer_type = "network"
   subnets            = var.nlb.subnet_ids
-  tags               = try(var.nlb.tags, {})
+  # Required: EC2 target lives in one AZ; tasks may run in any AZ.
+  # Without cross-zone LB, tasks in the other AZ get connection refused/timeout.
+  enable_cross_zone_load_balancing = true
+  tags                             = try(var.nlb.tags, {})
 }
 
 resource "aws_lb_listener" "nlb" {
