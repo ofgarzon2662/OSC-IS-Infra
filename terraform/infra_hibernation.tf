@@ -239,6 +239,15 @@ resource "aws_route53_record" "rds_private" {
   records = [aws_db_instance.this[0].address]
 }
 
+# Register RabbitMQ EC2 instance(s) as NLB targets
+resource "aws_lb_target_group_attachment" "nlb" {
+  for_each = local.infra_active && var.nlb != null ? toset(try(var.nlb.target_instance_ids, [])) : toset([])
+
+  target_group_arn = aws_lb_target_group.nlb[0].arn
+  target_id        = each.value
+  port             = var.nlb.target_group.port
+}
+
 # Stable private DNS for RabbitMQ NLB — rabbitmq.osc-infra.local
 # Reuses the same private zone as RDS so one zone covers all internal infra.
 # NOTE: requires rds.private_zone_name to be set.

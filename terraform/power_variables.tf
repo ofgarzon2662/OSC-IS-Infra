@@ -72,6 +72,8 @@ variable "nlb" {
     tags                = optional(map(string), {})
     # Private DNS record added to the RDS private zone (e.g. "rabbitmq" → rabbitmq.osc-infra.local)
     private_dns_record  = optional(string, "rabbitmq")
+    # EC2 instance IDs to register as targets in the NLB target group
+    target_instance_ids = optional(list(string), [])
   })
   default = null
 }

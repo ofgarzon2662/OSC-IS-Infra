@@ -103,8 +103,18 @@ resource "aws_ecs_service" "this" {
     assign_public_ip = var.assign_public_ip
   }
 
+  dynamic "load_balancer" {
+    for_each = try(each.value.alb_container_name, null) != null && local.infra_active && var.alb != null ? [1] : []
+    content {
+      target_group_arn = aws_lb_target_group.alb[0].arn
+      container_name   = each.value.alb_container_name
+      container_port   = each.value.alb_container_port
+    }
+  }
+
   lifecycle {
     prevent_destroy = true
+    ignore_changes  = [task_definition]
   }
 }
 
