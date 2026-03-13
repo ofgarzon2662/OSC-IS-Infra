@@ -159,19 +159,33 @@ locals {
 resource "aws_db_instance" "this" {
   count = local.infra_active && var.rds != null ? 1 : 0
 
-  identifier             = var.rds.identifier
-  instance_class         = var.rds.instance_class
-  snapshot_identifier    = local.rds_snapshot_identifier
-  db_subnet_group_name   = try(var.rds.db_subnet_group_name, null) != null ? var.rds.db_subnet_group_name : aws_db_subnet_group.this[0].name
-  vpc_security_group_ids = var.rds.vpc_security_group_ids
-  publicly_accessible    = try(var.rds.publicly_accessible, false)
-  multi_az               = try(var.rds.multi_az, false)
-  deletion_protection    = try(var.rds.deletion_protection, false)
-  apply_immediately      = try(var.rds.apply_immediately, true)
-  skip_final_snapshot    = false
+  identifier                  = var.rds.identifier
+  instance_class              = var.rds.instance_class
+  snapshot_identifier         = local.rds_snapshot_identifier
+  engine                      = try(var.rds.engine, null)
+  engine_version              = try(var.rds.engine_version, null)
+  allocated_storage           = try(var.rds.allocated_storage, null)
+  username                    = try(var.rds.username, null)
+  manage_master_user_password = try(var.rds.manage_master_user_password, false)
+  db_subnet_group_name        = try(var.rds.db_subnet_group_name, null) != null ? var.rds.db_subnet_group_name : aws_db_subnet_group.this[0].name
+  vpc_security_group_ids      = var.rds.vpc_security_group_ids
+  publicly_accessible         = try(var.rds.publicly_accessible, false)
+  multi_az                    = try(var.rds.multi_az, false)
+  deletion_protection         = try(var.rds.deletion_protection, false)
+  apply_immediately           = try(var.rds.apply_immediately, true)
+  skip_final_snapshot         = false
   final_snapshot_identifier = coalesce(
     try(var.rds.final_snapshot_identifier, null),
     "${var.rds.identifier}-final-snapshot"
   )
   tags = try(var.rds.tags, {})
+}
+
+resource "aws_route53_record" "rds_private" {
+  count   = local.infra_active && var.rds != null && try(var.rds.private_zone_id, null) != null ? 1 : 0
+  zone_id = var.rds.private_zone_id
+  name    = var.rds.private_dns_name
+  type    = "CNAME"
+  ttl     = 60
+  records = [aws_db_instance.this[0].address]
 }

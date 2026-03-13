@@ -41,3 +41,11 @@ output "nat_gateway_id" {
 output "rds_instance_identifier" {
   value = try(aws_db_instance.this[0].identifier, null)
 }
+
+output "rds_endpoint" {
+  value = try(aws_db_instance.this[0].address, null)
+}
+
+output "rds_master_secret_arn" {
+  value = try(aws_db_instance.this[0].master_user_secret[0].secret_arn, null)
+}

@@ -104,6 +104,15 @@ variable "rds" {
     final_snapshot_identifier       = optional(string)
     db_subnet_group_name            = optional(string)
     tags                            = optional(map(string), {})
+    # Fresh creation (no snapshot)
+    engine                          = optional(string)
+    engine_version                  = optional(string)
+    allocated_storage               = optional(number)
+    username                        = optional(string)
+    manage_master_user_password     = optional(bool, false)
+    # Private DNS
+    private_zone_id                 = optional(string)
+    private_dns_name                = optional(string, "db.osc-staging.local")
   })
   default = null
 }
