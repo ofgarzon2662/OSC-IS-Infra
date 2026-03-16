@@ -16,9 +16,30 @@ permissions:
   security-events: write
 
 jobs:
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: TruffleHog secrets scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --only-verified
+
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.0
+        with:
+          working_directory: terraform/
+          soft_fail: true
+
   plan:
     name: Terraform Plan
     if: github.event_name == 'pull_request'
+    needs: [security]
     runs-on: ubuntu-latest
     defaults:
       run:

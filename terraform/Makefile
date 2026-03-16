@@ -10,7 +10,18 @@ _DOWN_VARS := -var 'infra_mode=hibernated' -var 'runtime_mode=down' -var 'allow_
         plan-down down \
         status \
         backup-config restore-config \
-        up-runtime down-runtime up-hybrid down-hybrid verify-runtime
+        up-runtime down-runtime up-hybrid down-hybrid verify-runtime \
+        security-check
+
+# ---------------------------------------------------------------------------
+# Security scanning  (run before make up)
+# ---------------------------------------------------------------------------
+security-check:
+	@echo "=== Running tfsec ==="
+	docker run --rm -v "$(CURDIR):/src" aquasecurity/tfsec /src --no-color || true
+	@echo "=== Running checkov ==="
+	docker run --rm -v "$(CURDIR):/src" bridgecrew/checkov -d /src --framework terraform --compact --quiet || true
+	@echo "=== Security scan complete ==="
 
 # ---------------------------------------------------------------------------
 # Setup
